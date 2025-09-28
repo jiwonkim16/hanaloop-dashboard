@@ -4,40 +4,154 @@
 
 HanaLoop 탄소 배출량 대시보드는 Next.js 14의 App Router 패턴을 사용하는 현대적인 React 기반 아키텍처를 따릅니다. 시스템은 최적의 성능, 유지보수성, 사용자 경험을 위해 설계되었습니다.
 
-### 고수준 아키텍처
-
-```mermaid
-graph TB
-    A[브라우저 클라이언트] --> B[Next.js App Router]
-    B --> C[React 컴포넌트]
-    C --> D[Mock API 레이어]
-    D --> E[인메모리 데이터 저장소]
-
-    C --> F[UI 컴포넌트]
-    F --> G[Radix UI 프리미티브]
-
-    C --> H[상태 관리]
-    H --> I[React Hooks]
-    H --> J[컴포넌트 상태]
-
-    C --> K[스타일링 시스템]
-    K --> L[Tailwind CSS]
-    K --> M[Framer Motion]
-```
-
 ## 데이터 플로우 아키텍처
 
-### 1. 데이터 소스 및 플로우
+### 1. 전체 데이터 플로우
 
-```
-[Mock 데이터] → [API 레이어] → [React 컴포넌트] → [UI 렌더링]
-     ↓              ↓              ↓              ↓
-[국가 데이터]    [fetch*()]    [useState/useEffect]  [차트/테이블]
-[회사 데이터]    [시뮬레이션]   [컴포넌트 상태]      [애니메이션]
-[포스트 데이터]  [지연시간]     [로딩 상태]         [인터랙션]
+```mermaid
+flowchart TD
+    A[사용자 접속] --> B[페이지 컴포넌트 로드]
+    B --> C[useEffect 실행]
+    C --> D[API 함수 호출]
+    D --> E{Mock API 처리}
+    E --> F[지연시간 200-800ms]
+    F --> G[Mock 데이터 반환]
+    G --> H[useState로 상태 업데이트]
+    H --> I[컴포넌트 재렌더링]
+    I --> J[UI 화면 업데이트]
+
+    subgraph "Mock 데이터 소스"
+        K[countries 배열<br/>- 5개국 탄소세율]
+        L[companies 배열<br/>- 10개 기업 배출량]
+        M[posts 배열<br/>- 5개 지속가능성 포스트]
+    end
+
+    E --> K
+    E --> L
+    E --> M
 ```
 
-### 2. 컴포넌트 계층 구조
+### 2. 구체적인 데이터 플로우 과정
+
+**1단계: 페이지 로딩**
+
+```typescript
+// 사용자가 페이지 접속 시
+export default function DashboardPage() {
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 페이지 마운트 시 자동 실행
+  useEffect(() => {
+    loadData();
+  }, []);
+}
+```
+
+**2단계: API 호출**
+
+```typescript
+async function loadData() {
+  setLoading(true); // 로딩 상태 시작
+
+  try {
+    // 여러 API를 동시에 호출
+    const [companiesData, countriesData] = await Promise.all([
+      fetchCompanies(), // 회사 데이터
+      fetchCountries(), // 국가 데이터
+    ]);
+
+    setCompanies(companiesData); // 상태 업데이트
+    setCountries(countriesData);
+  } catch (error) {
+    setError(error.message); // 에러 처리
+  } finally {
+    setLoading(false); // 로딩 완료
+  }
+}
+```
+
+**3단계: Mock API 처리**
+
+```typescript
+// lib/api.ts에서 실제 동작
+export async function fetchCompanies(): Promise<Company[]> {
+  await jitter(); // 200-800ms 무작위 지연
+
+  // 실패 시뮬레이션 (15% 확률)
+  if (Math.random() < 0.15) {
+    throw new Error("네트워크 에러 시뮬레이션");
+  }
+
+  return companies; // lib/data.ts의 Mock 데이터 반환
+}
+```
+
+**4단계: UI 업데이트**
+
+```typescript
+// 데이터 로딩 중
+if (loading) {
+  return <SkeletonLoader />; // 스켈레톤 UI 표시
+}
+
+// 데이터 로딩 완료 후
+return (
+  <div>
+    <MetricsCards companies={companies} /> {/* 메트릭 카드 */}
+    <EmissionsChart data={emissions} /> {/* 차트 */}
+  </div>
+);
+```
+
+### 3. 데이터 흐름 상세 분석
+
+**페이지별 데이터 플로우**:
+
+1. **메인 대시보드 (`/`)**:
+
+   ```
+   fetchCompanies() + fetchCountries()
+   → 총 배출량, 탄소세, 나무 수 계산
+   → MetricsCards + Charts 렌더링
+   ```
+
+2. **회사 관리 (`/companies`)**:
+
+   ```
+   fetchCompanies()
+   → 회사별 데이터 정리
+   → CompanyCards + 개별 차트 렌더링
+   ```
+
+3. **탄소세 계산기 (`/calculator`)**:
+   ```
+   fetchCountries()
+   → 국가별 세율 로드
+   → 사용자 입력 × 세율 = 실시간 계산
+   ```
+
+**데이터 변환 과정**:
+
+```typescript
+// 원본 Mock 데이터 → UI에서 사용할 형태로 변환
+const totalEmissions = companies.reduce((sum, company) => {
+  return (
+    sum +
+    company.emissions.reduce((companySum, emission) => {
+      return companySum + emission.emissions;
+    }, 0)
+  );
+}, 0);
+
+// 계산된 데이터를 차트용으로 변환
+const chartData = companies.map((company) => ({
+  name: company.name,
+  value: calculateTotalEmissions(company),
+}));
+```
+
+### 4. 컴포넌트 계층 구조
 
 ```
 app/layout.tsx (루트 레이아웃)
@@ -58,31 +172,50 @@ app/layout.tsx (루트 레이아웃)
 │           └── Animations (Framer Motion)
 ```
 
-### 3. 상태 관리 플로우
+### 5. 상태 관리 플로우
 
-애플리케이션은 외부 라이브러리 없이 React의 내장 상태 관리를 사용합니다:
+**React의 내장 상태 관리 사용**:
+
+애플리케이션은 Redux나 Zustand 같은 외부 라이브러리 없이 React의 useState와 useEffect만 사용합니다.
 
 ```typescript
-// 앱 전반에서 사용되는 데이터 페칭 패턴
-const [data, setData] = useState<DataType[]>([]);
-const [loading, setLoading] = useState(true);
-const [error, setError] = useState<string | null>(null);
+// 모든 페이지에서 공통으로 사용하는 패턴
+function DataPage() {
+  // 1. 상태 정의
+  const [data, setData] = useState<DataType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-useEffect(() => {
+  // 2. 데이터 로딩 함수
   async function loadData() {
     try {
-      setLoading(true);
-      const result = await fetchData(); // 지연시간이 있는 Mock API
-      setData(result);
+      setLoading(true); // 로딩 시작
+      const result = await fetchData(); // API 호출
+      setData(result); // 데이터 저장
     } catch (err) {
-      setError(err.message);
+      setError(err.message); // 에러 저장
     } finally {
-      setLoading(false);
+      setLoading(false); // 로딩 종료
     }
   }
-  loadData();
-}, []);
+
+  // 3. 컴포넌트 마운트 시 자동 실행
+  useEffect(() => {
+    loadData();
+  }, []); // 빈 의존성 배열 = 한 번만 실행
+
+  // 4. 상태에 따른 UI 렌더링
+  if (loading) return <Skeleton />;
+  if (error) return <ErrorMessage />;
+  return <DataDisplay data={data} />;
+}
 ```
+
+**상태 전파 방식**:
+
+- 부모 → 자식: props를 통한 데이터 전달
+- 자식 → 부모: 콜백 함수를 통한 이벤트 전달
+- 형제 컴포넌트: 공통 부모에서 상태 관리
 
 ## API 레이어 아키텍처
 
@@ -111,22 +244,7 @@ lib/data.ts
 
 ## 컴포넌트 아키텍처
 
-### 1. UI 컴포넌트 시스템
-
-커스텀 스타일링이 적용된 Radix UI 프리미티브 기반:
-
-```
-components/ui/
-├── 기본 컴포넌트 (Radix UI)
-│   ├── Button, Card, Input
-│   ├── Select, Progress, Skeleton
-│   └── Sheet, Separator, Badge
-├── 커스텀 컴포넌트
-│   ├── AnimatedCounter (Framer Motion)
-│   └── FloatingParticles (애니메이션)
-```
-
-### 2. 기능별 컴포넌트
+### 1. 기능별 컴포넌트
 
 도메인별로 구성된 기능별 컴포넌트:
 
@@ -138,28 +256,6 @@ components/
 ├── calculator/ (탄소세 계산기)
 ├── trees/ (환경 영향도)
 └── layout/ (페이지 레이아웃)
-```
-
-### 3. 차트 아키텍처
-
-데이터 시각화를 위한 Recharts 사용:
-
-```typescript
-// 차트 컴포넌트 패턴
-const EmissionsChart: React.FC<{data: GhgEmission[]}> = ({ data }) => {
-  const chartData = useMemo(() => transformData(data), [data]);
-
-  return (
-    <ResponsiveContainer>
-      <LineChart data={chartData}>
-        <Line dataKey="emissions" stroke="#22c55e" />
-        <XAxis dataKey="yearMonth" />
-        <YAxis />
-        <Tooltip />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
 ```
 
 ## 성능 아키텍처
@@ -181,46 +277,22 @@ const EmissionsChart: React.FC<{data: GhgEmission[]}> = ({ data }) => {
 └── static/ (CSS, 폰트, 이미지)
 ```
 
-### 3. 캐싱 전략
-
-- **정적 생성**: 가능한 경우 빌드 타임 페이지 생성
-- **클라이언트 사이드 캐싱**: React 상태를 통한 컴포넌트 레벨 데이터 캐싱
-- **브라우저 캐싱**: Next.js를 통한 최적화된 애셋 캐싱
-
-## 보안 아키텍처
-
-### 1. 데이터 검증
-
-- **TypeScript**: 컴파일 타임 타입 체킹
-- **Zod 스키마**: 런타임 데이터 검증 (구현 준비 완료)
-- **API 검증**: API 레이어의 입력 검증
-
-### 2. 클라이언트 사이드 보안
-
-- **민감 데이터 없음**: 모든 데이터는 모의/시연 데이터
-- **CSP 준비**: Content Security Policy 호환
-- **HTTPS 전용**: 프로덕션 배포 보안
-
 ## 배포 아키텍처
 
 ### 개발환경
-- **로컬 개발**: Turbopack을 사용한 `npm run dev`
+
+- **로컬 개발**: Turbopack을 사용한 `bun run dev`
 - **핫 리로드**: 즉시 컴포넌트 업데이트
 - **Mock API**: 외부 의존성 없음
 
 ### 프로덕션
-- **정적 내보내기**: 최적화된 번들을 생성하는 `npm run build`
+
+- **정적 내보내기**: 최적화된 번들을 생성하는 `bun run build`
 - **CDN 준비**: CDN 배포에 최적화된 정적 애셋
-- **범용 배포**: Vercel, Netlify, AWS 등과 호환
-
-## 확장성 고려사항
-
-### 현재 제한사항
-- **인메모리 저장소**: 서버 재시작 시 데이터 리셋
-- **단일 인스턴스**: 수평 확장 지원 없음
-- **Mock API**: 프로덕션 준비되지 않은 데이터 레이어
+- **범용 배포**: Vercel
 
 ### 향후 확장성
+
 - **데이터베이스 통합**: PostgreSQL/MongoDB 통합 준비
 - **API Gateway**: 마이크로서비스 연결 가능
 - **상태 관리**: 필요시 Redux/Zustand로 업그레이드 가능

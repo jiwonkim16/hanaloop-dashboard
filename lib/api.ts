@@ -1,5 +1,5 @@
-import { companies, posts, countries } from "./data";
-import type { Company, Post, Country } from "./types";
+import { companies, countries, posts } from "./data";
+import { Company, Country, Post } from "./types";
 
 // Simulate network latency and occasional failures
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -26,7 +26,7 @@ export async function fetchPosts(): Promise<Post[]> {
 }
 
 export async function createOrUpdatePost(
-  p: Omit<Post, "id"> & { id?: string },
+  p: Omit<Post, "id"> & { id?: string }
 ): Promise<Post> {
   await delay(jitter());
   if (maybeFail()) throw new Error("Save failed");
@@ -45,13 +45,13 @@ export async function createOrUpdatePost(
 export function calculateTotalEmissions(company: Company): number {
   return company.emissions.reduce(
     (total, emission) => total + emission.emissions,
-    0,
+    0
   );
 }
 
 export function calculateCarbonTax(
   company: Company,
-  countries: Country[],
+  countries: Country[]
 ): number {
   const country = countries.find((c) => c.code === company.country);
   if (!country) return 0;
