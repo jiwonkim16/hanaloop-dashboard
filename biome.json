@@ -15,6 +15,9 @@
     "indentWidth": 2
   },
   "linter": {
+    "suspicious": {
+      "noArrayIndexKey": "off"
+    },
     "enabled": true,
     "rules": {
       "recommended": true,
@@ -28,10 +31,6 @@
     }
   },
   "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
+    "actions": {}
   }
 }
